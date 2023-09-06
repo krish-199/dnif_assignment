@@ -1,3 +1,4 @@
+from io import BytesIO
 import json
 import threading
 from flask import Flask, jsonify
@@ -9,15 +10,34 @@ import pandas as pd
 
 app = Flask(__name__)
 
+df = None
+
+
+def push_df():
+    try:
+        json_obj = None
+        json_objects = []
+        with open("uncompressed_output.txt", "r") as file:
+            for line in file:
+                try:
+                    json_obj = json.loads(line)
+                    json_objects.append(json_obj)
+                except Exception as e:
+                    print("Error while parsing JSon", e)
+
+        return pd.DataFrame.from_records(data=json_objects)
+    except Exception as e:
+        print("Error in get df", e)
+
 
 @app.route("/api/data/<ip_addr>", methods=["GET"])
 def get_data(ip_addr):
-    with open("uncompressed_output.txt", "r") as file:
-        lines = file.readlines()
-    json_data = json.dumps(lines, indent=4)
-    df = pd.DataFrame(json_data)
-
-    return df[df["start_ip"] == ip_addr].to_json()
+    if df.empty:
+        return "Data not fetched"
+    final_obj = df[df["start_ip"] == ip_addr].to_dict(orient="records")[0]
+    if final_obj["start_ip"] == None:
+        return "Ip not found"
+    return json.dumps(final_obj)
 
 
 def fetch_data_from_url():
@@ -46,6 +66,7 @@ def run_scheduled_tasks():
 
 if __name__ == "__main__":
     fetch_data_from_url()
+    df = push_df()
     schedule_thread = threading.Thread(target=run_scheduled_tasks)
     schedule_thread.start()
 
